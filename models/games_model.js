@@ -15,13 +15,13 @@ var GameSchema=new Schema({
         type:String
     },
     roomState:{
-        type:String
+        type:Number
     },
     gameType:{
-        type:String
+        type:Number
     },
     gameTime:{
-        type:String
+        type:Number
     },
     //玩家
     players:[
@@ -29,7 +29,10 @@ var GameSchema=new Schema({
             playerName:{
                 type:String
             },
-            playerTime:{
+            playerTimeA:{
+                type:Number
+            },
+            playerTimeB:{
                 type:Number
             }
         }
@@ -46,10 +49,34 @@ var GameSchema=new Schema({
         type:String
     },
     gameMenu:[
-
+        {
+            type:String
+        }        
     ],
     gameBoards:[
-
-    ]
+        {
+            type:String
+        }  
+    ],
+    gameResult:{
+        winnerteam:{
+            type:Number
+        },
+        winner:[
+            {
+                type:String
+            }
+        ],
+        loser:[
+            {
+                type:String
+            }
+        ],
+        drawer:[
+            {
+                type:String
+            }
+        ]
+    }
 });
 exports.GameSchema=GameSchema;

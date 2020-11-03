@@ -5,8 +5,9 @@ var expressSession=require("express-session");
 var mongoose=require('mongoose');
 var mongoStore=require('connect-mongo')(expressSession);
 var UserSchema=require('./models/users_model.js').UserSchema;
+var Game=require('./models/game_Class.js').Game;
 
-var io = require('socket.io')(server);
+var io = require('socket.io')();
 
 var User=mongoose.model('User',UserSchema);
 
@@ -23,27 +24,71 @@ conn.on('open', function() {
     console.log(" connected!");
     // we're connected!保持常开即可，不必每次断开数据库连接
 });
-
+var numUsers = 0;
 //socketio部分
 io.on('connection', (socket) => {
     var addedUser = false;
-    //连接
-    socket.on('userconnect', (username) => {
-        
-        socket.username = username;
-        ++numUsers;
-        addedUser = true;
-    });
+    ++numUsers;
+    addedUser=true;
+
+    console.log("a user connected! un:"+numUsers);
+    
     //断开连接 
     socket.on('disconnect', () => {
         //正常退出
         //游戏中掉线
         if (addedUser) {
-          --numUsers;           
+          --numUsers;  
+          console.log("a user disconnected.. un:"+numUsers);         
         }        
     });
+
     //创建房间creategame data={username:"ruchaos",hostName:"ruchaos",gameName:"ruchaos",gameType:"1v1",gameTime:"快棋"}
+    socket.on('CreateRoom',(data)=>{
+        if(data.token=="abc123"){
+            var game=new Game(data.gameName,data.username,data.gameType,data.gameTime);
+            game.roomID="r"+roomCounter;
+            if(roomCounter==100){
+                roomCounter=1;
+            }else{
+                roomCounter++;
+            };
+            var newRoom={};
+            newRoom.roomID=game.roomID;
+            newRoom.roomState=game.roomState;
+            newRoom.gameName=game.gameName;
+            newRoom.hostName=game.hostName;
+            newRoom.gameType=game.gameType;
+            newRoom.gameTime=game.gameType;
+            newRoom.gameDate=0; 
+            roomlist.push(newRoom);                       
+            gamelist.push(game);
+            socket.emit("CreateRoomSuccess",game.CreateRoomSuccessData());
+
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        }
+    });
+
     //生成房间并加入列表roomlist.rooms.push({roomID:123,roomState:1,hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"})
+    socket.on("EnterRoom",(data)=>{
+        if(data.token=="abc123"){
+            gamelist.forEach(game=>{
+                if(game.roomID==data.roomID){
+                    if(data.username!=game.hostName){
+                        game.addPlayer(data.username);
+                    };
+                    socket.join(game.roomID,()=>{                        
+                        socket.emit("EnterRoomSuccess",game.EnterRoomSuccessData());
+                    });
+                };
+            });            
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+
     //socket.join(room),并返回给玩家roomID
 
     //房主交换位置switch
@@ -59,6 +104,7 @@ io.on('connection', (socket) => {
     //观战
 
 });
+
 
 
 io.listen(3000);
@@ -96,14 +142,12 @@ app.get('/',  function(req,res){
     res.send("Main Index!");
 });
 
-var roomlist={rooms:[]};
-roomlist.rooms=[
-    {roomID:123,roomState:1,hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
-    {roomID:124,roomState:2,hostName:"XXXs",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
-    {roomID:125,roomState:1,hostName:"rucDSDhaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
-    {roomID:125,roomState:1,hostName:"rucDDhaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"}
-];
-var numUsers = 0;
+var roomlist=[];
+    // {roomID:123,roomState:1,gameName:"ruchaos 's game",hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
+
+var gamelist=[];
+
+var roomCounter =1;
 
 app.post('/list',function(req,res){
     //todo获取房间列表
@@ -111,7 +155,7 @@ app.post('/list',function(req,res){
     var x={};
     x={
         type:"list",
-        rooms:roomlist.rooms
+        rooms:roomlist
     };
     var msg= JSON.stringify(x);
 
@@ -271,7 +315,7 @@ app.post('/changePW',function(req,res){
 
 app.post('/login',function(req,res){
     //登录
-    var x= {type:"error",error:{},username:""};
+    var x= {type:"error",username:""};
     x.username=req.body.username;
     var pwd=req.body.password;
     var query=User.find().where('username', x.username);
