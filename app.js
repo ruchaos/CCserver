@@ -1,11 +1,16 @@
 ﻿var express=require('express');
 var bodyParser=require('body-parser');
-var mongoose=require('mongoose');
 var expressSession=require("express-session");
+
+var mongoose=require('mongoose');
 var mongoStore=require('connect-mongo')(expressSession);
 var UserSchema=require('./models/users_model.js').UserSchema;
+
+var io = require('socket.io')(server);
+
 var User=mongoose.model('User',UserSchema);
 
+//mongoose设置
 mongoose.set('useNewUrlParser', true);
 mongoose.set('useFindAndModify', false);
 mongoose.set('useCreateIndex', true);
@@ -19,15 +24,56 @@ conn.on('open', function() {
     // we're connected!保持常开即可，不必每次断开数据库连接
 });
 
+//socketio部分
+io.on('connection', (socket) => {
+    var addedUser = false;
+    //连接
+    socket.on('userconnect', (username) => {
+        
+        socket.username = username;
+        ++numUsers;
+        addedUser = true;
+    });
+    //断开连接 
+    socket.on('disconnect', () => {
+        //正常退出
+        //游戏中掉线
+        if (addedUser) {
+          --numUsers;           
+        }        
+    });
+    //创建房间creategame data={username:"ruchaos",hostName:"ruchaos",gameName:"ruchaos",gameType:"1v1",gameTime:"快棋"}
+    //生成房间并加入列表roomlist.rooms.push({roomID:123,roomState:1,hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"})
+    //socket.join(room),并返回给玩家roomID
 
+    //房主交换位置switch
+    //判断房主权利，
+    //房主踢出玩家
+    //房主退出-取消房间
+    
+    //游戏开始
+    //游戏消息
+    //游戏结束
+    //断线重连
+
+    //观战
+
+});
+
+
+io.listen(3000);
+
+//登录等服务
 var app=express();
 app.all('*', function(req, res, next) {
+    //避免消息头导致的阻拦
     res.header("Access-Control-Allow-Origin", "*");
     res.header("Access-Control-Allow-Headers", "Content-Type,application/json");
     res.header('Access-Control-Allow-Methods', 'PUT, GET, POST, DELETE, OPTIONS');
     res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
     next();
 });
+
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({
     extended: true
@@ -50,18 +96,22 @@ app.get('/',  function(req,res){
     res.send("Main Index!");
 });
 
+var roomlist={rooms:[]};
+roomlist.rooms=[
+    {roomID:123,roomState:1,hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
+    {roomID:124,roomState:2,hostName:"XXXs",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
+    {roomID:125,roomState:1,hostName:"rucDSDhaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
+    {roomID:125,roomState:1,hostName:"rucDDhaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"}
+];
+var numUsers = 0;
+
 app.post('/list',function(req,res){
-    //获取房间列表
+    //todo获取房间列表
     //console.log("listing");
     var x={};
     x={
         type:"list",
-        rooms:[
-            {roomID:123,roomState:1,hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
-            {roomID:124,roomState:2,hostName:"XXXs",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
-            {roomID:125,roomState:1,hostName:"rucDSDhaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
-            {roomID:125,roomState:1,hostName:"rucDDhaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"}
-        ]
+        rooms:roomlist.rooms
     };
     var msg= JSON.stringify(x);
 
@@ -145,7 +195,7 @@ app.post('/register',function(req,res){
 });
 
 app.post('/record',function(req,res){
-    //查询对战记录
+    //todo查询对战记录
     //测试条件
     var x= {type:"error",error:{},username:"",record:123};
     if(req.body.username=="rux"){
@@ -266,4 +316,7 @@ app.post('/login',function(req,res){
 });
 
 app.listen(8080);
+
+
+
 
