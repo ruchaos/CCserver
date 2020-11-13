@@ -59,11 +59,12 @@ io.on('connection', (socket) => {
             newRoom.gameName=game.gameName;
             newRoom.hostName=game.hostName;
             newRoom.gameType=game.gameType;
-            newRoom.gameTime=game.gameType;
+            newRoom.gameTime=game.gameTime;
             newRoom.gameDate=0; 
             roomlist.push(newRoom);                       
             gamelist.push(game);
             socket.emit("CreateRoomSuccess",game.CreateRoomSuccessData());
+            console.log("EnterRoomSuccess: "+data.username);
 
         }else{
             socket.emit("ErrorMsg",{msg:"验证登录失败！"});
@@ -75,18 +76,55 @@ io.on('connection', (socket) => {
         if(data.token=="abc123"){
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
-                    if(data.username!=game.hostName){
-                        game.addPlayer(data.username);
-                    };
-                    socket.join(game.roomID,()=>{                        
-                        socket.emit("EnterRoomSuccess",game.EnterRoomSuccessData());
-                    });
+                    if(game.isfull()){
+                        socket.emit("ErrorMsg",{msg:"房间已满"});
+                    }
+                    else{
+                        var gameplayers=[game.players[0].playerName,game.players[1].playerName,game.players[2].playerName,game.players[3].playerName];
+                        function isPlayer(playerName){
+                            return data.username==playerName;
+                        };
+                        var alreadyHere=gameplayers.some(isPlayer);
+                        if(!alreadyHere){
+                            game.addPlayer(data.username);
+                        };
+                        socket.join(game.roomID,()=>{                        
+                            socket.emit("EnterRoomSuccess",game.EnterRoomSuccessData());
+                            io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                            socket.to(game.roomID).emit("ErrorMsg",{msg:data.username+" 进入了房间"});
+                            console.log("EnterRoomSuccess: "+data.username+"room:"+game.roomID);
+                        });
+                    };                    
                 };
             });            
         }else{
             socket.emit("ErrorMsg",{msg:"验证登录失败！"});
         };
     });
+
+    socket.on("EnterRoomAfterCreate",(data)=>{
+        if(data.token=="abc123"){
+            gamelist.forEach(game=>{
+                if(game.roomID==data.roomID){
+                    if(game.isfull()){
+                        socket.emit("ErrorMsg",{msg:"房间已满"});
+                    }
+                    else{
+                        if(data.username!=game.hostName){
+                            game.addPlayer(data.username);
+                        };
+                        socket.join(game.roomID,()=>{                        
+                            socket.emit("EnterRoomAfterCreateSuccess",game.EnterRoomSuccessData());
+                            console.log("EnterRoomAfterCreateSuccess: "+data.username+"room:"+game.roomID);
+                        });
+                    };                    
+                };
+            });            
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
 
 
     //socket.join(room),并返回给玩家roomID
