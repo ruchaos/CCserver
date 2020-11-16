@@ -3,7 +3,7 @@ var bodyParser=require('body-parser');
 var expressSession=require("express-session");
 
 var mongoose=require('mongoose');
-var mongoStore=require('connect-mongo')(expressSession);
+// var mongoStore=require('connect-mongo')(expressSession);
 var UserSchema=require('./models/users_model.js').UserSchema;
 var Game=require('./models/game_Class.js').Game;
 
@@ -25,6 +25,14 @@ conn.on('open', function() {
     // we're connected!保持常开即可，不必每次断开数据库连接
 });
 var numUsers = 0;
+
+//验证token
+function tokenValid(data){
+    if(data.token=="abc123"){
+        return true;
+    };
+};
+
 //socketio部分
 io.on('connection', (socket) => {
     var addedUser = false;
@@ -43,37 +51,9 @@ io.on('connection', (socket) => {
         }        
     });
 
-    //创建房间creategame data={username:"ruchaos",hostName:"ruchaos",gameName:"ruchaos",gameType:"1v1",gameTime:"快棋"}
-    socket.on('CreateRoom',(data)=>{
-        if(data.token=="abc123"){
-            var game=new Game(data.gameName,data.username,data.gameType,data.gameTime);
-            game.roomID="r"+roomCounter;
-            if(roomCounter==100){
-                roomCounter=1;
-            }else{
-                roomCounter++;
-            };
-            var newRoom={};
-            newRoom.roomID=game.roomID;
-            newRoom.roomState=game.roomState;
-            newRoom.gameName=game.gameName;
-            newRoom.hostName=game.hostName;
-            newRoom.gameType=game.gameType;
-            newRoom.gameTime=game.gameTime;
-            newRoom.gameDate=0; 
-            roomlist.push(newRoom);                       
-            gamelist.push(game);
-            socket.emit("CreateRoomSuccess",game.CreateRoomSuccessData());
-            console.log("EnterRoomSuccess: "+data.username);
-
-        }else{
-            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
-        }
-    });
-
-    //生成房间并加入列表roomlist.rooms.push({roomID:123,roomState:1,hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"})
+    //玩家进入房间
     socket.on("EnterRoom",(data)=>{
-        if(data.token=="abc123"){
+        if(tokenValid(data)){
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
                     if(game.isfull()){
@@ -102,8 +82,62 @@ io.on('connection', (socket) => {
         };
     });
 
+    //离开房间
+    socket.on('LeaveRoom',(data)=>{
+        if(tokenValid(data)){
+            gamelist.forEach(game=>{
+                if(game.roomID==data.roomID){
+                    game.players.forEach(player=>{
+                        if(player.playerName==data.username){
+                            player.playerName="";
+                        };                        
+                    });
+                    var x={username:"",roomID:""};
+                    x.username=data.username;
+                    x.roomID=data.roomID;
+                    socket.emit("LeaveRoomSuccess",x);                        
+                    socket.leave(game.roomID);
+                    io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                    io.to(game.roomID).emit("ErrorMsg",{msg:data.username+" 离开了房间"});
+                };
+            });
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    //创建房间
+    socket.on('CreateRoom',(data)=>{
+        if(tokenValid(data)){
+            var game=new Game(data.gameName,data.username,data.gameType,data.gameTime);
+            game.roomID="r"+roomCounter;
+            if(roomCounter==100){
+                roomCounter=1;
+            }else{
+                roomCounter++;
+            };
+            var newRoom={};
+            newRoom.roomID=game.roomID;
+            newRoom.roomState=game.roomState;
+            newRoom.gameName=game.gameName;
+            newRoom.hostName=game.hostName;
+            newRoom.gameType=game.gameType;
+            newRoom.gameTime=game.gameTime;
+            newRoom.gameDate=0; 
+            roomlist.push(newRoom);                       
+            gamelist.push(game);
+            socket.emit("CreateRoomSuccess",game.CreateRoomSuccessData());
+            console.log("EnterRoomSuccess: "+data.username);
+
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        }
+    });
+
+
+    //房主进入房间
     socket.on("EnterRoomAfterCreate",(data)=>{
-        if(data.token=="abc123"){
+        if(tokenValid(data)){
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
                     if(game.isfull()){
@@ -125,12 +159,84 @@ io.on('connection', (socket) => {
         };
     });
 
-
-
-    //socket.join(room),并返回给玩家roomID
-
     //房主交换位置switch
-    //判断房主权利，
+    socket.on("Switch12",(data)=>{
+        if(tokenValid(data)){            
+            gamelist.forEach(game=>{                
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                        var vPlayer={};
+                        if(game.gameType==1){                        
+                            vPlayer=game.players[0];
+                            game.players[0]=game.players[1];
+                            game.players[2]=game.players[1];
+                            game.players[1]=vPlayer;
+                            game.players[3]=vPlayer;
+                            io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                        }else{
+                            vPlayer=game.players[0];
+                            game.players[0]=game.players[1];                        
+                            game.players[1]=vPlayer;                        
+                            io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                        };
+                    };
+                };
+            });  
+                                  
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    socket.on("Switch23",(data)=>{
+        if(tokenValid(data)){
+            
+            gamelist.forEach(game=>{
+                
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                        var vPlayer={};
+                        if(game.gameType==1){ 
+                        }else{
+                            vPlayer=game.players[1];
+                            game.players[1]=game.players[2];                        
+                            game.players[2]=vPlayer;                        
+                            io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                        };                             
+                    };
+                };
+            });  
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    socket.on("Switch34",(data)=>{
+        if(tokenValid(data)){
+            
+            gamelist.forEach(game=>{
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                        var vPlayer={};
+                        if(game.gameType==1){ 
+                        }else{
+                            vPlayer=game.players[2];
+                            game.players[2]=game.players[3];                        
+                            game.players[3]=vPlayer;                        
+                            io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                        };                             
+                    };
+                };
+            });  
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+
+
     //房主踢出玩家
     //房主退出-取消房间
     
@@ -163,17 +269,17 @@ app.use(bodyParser.urlencoded({
     extended: true
 }));
 
-app.use(expressSession({
-    secret:'SECRET',
-    resave: false, //添加 resave 选项
-    saveUninitialized: true, //添加 saveUninitialized 选项
-    cookie:{maxAge:60*60*1000},
-    store:new mongoStore({
-        url:'mongodb://localhost/cc',
-        db:mongoose.connection.db,
-        collection:'sessions'
-    })
-}));
+// app.use(expressSession({
+//     secret:'SECRET',
+//     resave: false, //添加 resave 选项
+//     saveUninitialized: true, //添加 saveUninitialized 选项
+//     cookie:{maxAge:60*60*1000},
+//     store:new mongoStore({
+//         url:'mongodb://localhost/cc',
+//         db:mongoose.connection.db,
+//         collection:'sessions'
+//     })
+// }));
 
 //app.use('/',express.static('./public'));
 app.get('/',  function(req,res){
