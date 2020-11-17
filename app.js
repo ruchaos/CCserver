@@ -87,11 +87,8 @@ io.on('connection', (socket) => {
         if(tokenValid(data)){
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
-                    game.players.forEach(player=>{
-                        if(player.playerName==data.username){
-                            player.playerName="";
-                        };                        
-                    });
+                    game.removePlayer(data.username);
+                    
                     var x={username:"",roomID:""};
                     x.username=data.username;
                     x.roomID=data.roomID;
@@ -238,7 +235,75 @@ io.on('connection', (socket) => {
 
 
     //房主踢出玩家
+
+    socket.on("KickPlayer",(data)=>{
+        console.log(data.username+":KickPlayer");
+        if(tokenValid(data)){            
+            gamelist.forEach(game=>{
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                        var x={};
+                        x.roomID=data.roomID;
+                        x.bekickedPlayer=data.bekickedPlayer;
+                        io.to(game.roomID).emit("PlayerBeKicked",x);
+                    };
+                };
+            });  
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
     //房主退出-取消房间
+    socket.on("DismissRoom",(data)=>{
+        console.log(data.username+":DismissRoom");
+        if(tokenValid(data)){
+            gamelist.forEach((game,index)=>{
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                
+                        //向socket房间广播解散消息
+                        var x={};
+                        x.roomID=data.roomID;
+                        io.to(game.roomID).emit("RoomDismissed",x);
+
+                        //从房间列表中删除房间
+                        if(game.roomID==data.roomID){
+                            if(data.username==game.hostName){
+                                gamelist.splice(index,1);
+                                roomlist.splice(index,1);
+                            };
+                        }; 
+
+                        //所有人退出socket房间
+                        io.of('/').in(game.roomID).clients((err, socketIds) => {
+                            if (err) throw err;                  
+                            socketIds.forEach(socketId => {
+                                io.sockets.sockets[socketId].leave(game.roomID);
+                            }); 
+                        });
+                    };
+                };
+            });
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    
+// 另一种删除数组元素的方式。roomlist=removeRoom（arr,roomID);此处无重复ID，所以用splice即可。
+// function removeRoom(arr, roomID) {
+//     var newarr=[];
+//     arr.forEach(function(room,index){
+
+//         if(room.roomID!=roomID){         
+//             newarr.push(element)
+//         }
+//     })
+//     return newarr;
+// };
     
     //游戏开始
     //游戏消息
@@ -290,6 +355,7 @@ var roomlist=[];
     // {roomID:123,roomState:1,gameName:"ruchaos 's game",hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
 
 var gamelist=[];
+
 
 var roomCounter =1;
 

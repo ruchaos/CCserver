@@ -32,7 +32,7 @@ class Game{
         };
 
         this.setInitTime(gameType);
-        this.addPlayer(hostName);  
+        this.addPlayer(hostName); 
     };
     
 
@@ -116,6 +116,15 @@ class Game{
             }; 
         };             
     };
+
+    removePlayer(playerName){
+        this.players.forEach(player=>{
+            if(player.playerName==playerName){
+                player.playerName="";
+            };                        
+        });
+        this.playernum--;
+    }
 
     isfull(){
         if(((this.gameType==1)&&(this.playernum>=2))||((this.gameType==2)&&(this.playernum>=4))||((this.gameType==3)&&(this.playernum>=4))){
