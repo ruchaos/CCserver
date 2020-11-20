@@ -24,7 +24,8 @@ conn.on('open', function() {
     console.log(" connected!");
     // we're connected!保持常开即可，不必每次断开数据库连接
 });
-var numUsers = 0;
+
+
 
 //验证token
 function tokenValid(data){
@@ -33,27 +34,70 @@ function tokenValid(data){
     };
 };
 
+var user=new Map();
+var numUsers = 0;
+
 //socketio部分
 io.on('connection', (socket) => {
     var addedUser = false;
-    ++numUsers;
-    addedUser=true;
+    socket.username="guest";
+    console.log("a user connected")
 
-    console.log("a user connected! un:"+numUsers);
+    socket.on("UserLogin",(data)=>{
+        if(tokenValid(data)){
+            if(!addedUser){ 
+
+                user.set(data.username,socket.id);
+                socket.username=data.username;//方便从user MAP 中清除
     
+                ++numUsers;
+                addedUser=true;
+    
+                console.log("A Login user here un:"+numUsers);
+                console.log(user);
+            };
+        };
+    }); 
+
+    socket.on('UserLogout', (data) => {  
+        //已经退出登录，不检查TOKEN      
+        if (addedUser) {              
+          
+            user.delete(data.username);
+
+            addedUser = false//重置  
+            socket.username="guest";  
+
+            --numUsers;
+          
+            console.log("A Login user Logout.. un:"+numUsers); 
+            console.log(user); 
+        } 
+    });
+
     //断开连接 
     socket.on('disconnect', () => {
         //正常退出
         //游戏中掉线
         if (addedUser) {
-          --numUsers;  
-          console.log("a user disconnected.. un:"+numUsers);         
-        }        
+
+            user.delete(socket.username);
+            
+            socket.username="guest"; 
+
+            --numUsers;
+          
+            console.log("A Login user disconnected.. un:"+numUsers); 
+            console.log(user); 
+        } 
     });
+
+
 
     //玩家进入房间
     socket.on("EnterRoom",(data)=>{
         if(tokenValid(data)){
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
                     if(game.isfull()){
@@ -85,15 +129,18 @@ io.on('connection', (socket) => {
     //离开房间
     socket.on('LeaveRoom',(data)=>{
         if(tokenValid(data)){
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
                     game.removePlayer(data.username);
+
+                    socket.leave(game.roomID);
                     
                     var x={username:"",roomID:""};
                     x.username=data.username;
                     x.roomID=data.roomID;
-                    socket.emit("LeaveRoomSuccess",x);                        
-                    socket.leave(game.roomID);
+                    socket.emit("LeaveRoomSuccess",x);                                        
+                    
                     io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
                     io.to(game.roomID).emit("ErrorMsg",{msg:data.username+" 离开了房间"});
                 };
@@ -105,7 +152,7 @@ io.on('connection', (socket) => {
 
     //创建房间
     socket.on('CreateRoom',(data)=>{
-        if(tokenValid(data)){
+        if(tokenValid(data)){            
             var game=new Game(data.gameName,data.username,data.gameType,data.gameTime);
             game.roomID="r"+roomCounter;
             if(roomCounter==100){
@@ -135,6 +182,7 @@ io.on('connection', (socket) => {
     //房主进入房间
     socket.on("EnterRoomAfterCreate",(data)=>{
         if(tokenValid(data)){
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
             gamelist.forEach(game=>{
                 if(game.roomID==data.roomID){
                     if(game.isfull()){
@@ -158,7 +206,8 @@ io.on('connection', (socket) => {
 
     //房主交换位置switch
     socket.on("Switch12",(data)=>{
-        if(tokenValid(data)){            
+        if(tokenValid(data)){   
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});         
             gamelist.forEach(game=>{                
                 if(game.roomID==data.roomID){
                     if(data.username==game.hostName){
@@ -187,7 +236,7 @@ io.on('connection', (socket) => {
 
     socket.on("Switch23",(data)=>{
         if(tokenValid(data)){
-            
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
             gamelist.forEach(game=>{
                 
                 if(game.roomID==data.roomID){
@@ -211,9 +260,10 @@ io.on('connection', (socket) => {
 
     socket.on("Switch34",(data)=>{
         if(tokenValid(data)){
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
             
             gamelist.forEach(game=>{
-                if(game.roomID==data.roomID){
+               if(game.roomID==data.roomID){
                     if(data.username==game.hostName){
                         var vPlayer={};
                         if(game.gameType==1){ 
@@ -224,7 +274,7 @@ io.on('connection', (socket) => {
                             io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
                         };                             
                     };
-                };
+               };
             });  
                       
         }else{
@@ -238,16 +288,34 @@ io.on('connection', (socket) => {
 
     socket.on("KickPlayer",(data)=>{
         console.log(data.username+":KickPlayer");
-        if(tokenValid(data)){            
+        if(tokenValid(data)){  
+            
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
+            
+
             gamelist.forEach(game=>{
-                if(game.roomID==data.roomID){
-                    if(data.username==game.hostName){
+               if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){                      
+                        
+
+                        game.removePlayer(data.bekickedPlayer);
+
+                        var KPid=user.get(data.bekickedPlayer);                        
+
+                        io.sockets.sockets[KPid].leave(game.roomID);
+
                         var x={};
                         x.roomID=data.roomID;
                         x.bekickedPlayer=data.bekickedPlayer;
-                        io.to(game.roomID).emit("PlayerBeKicked",x);
+
+                        io.to(KPid).emit("BeKicked",x);
+                        io.to(KPid).emit("ErrorMsg",{msg:"你被请出了房间"});                        
+
+                        io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
+                        io.to(game.roomID).emit("ErrorMsg",{msg:data.username+" 被请出房间"});
+
                     };
-                };
+               };
             });  
                       
         }else{
@@ -259,6 +327,8 @@ io.on('connection', (socket) => {
     socket.on("DismissRoom",(data)=>{
         console.log(data.username+":DismissRoom");
         if(tokenValid(data)){
+
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
             gamelist.forEach((game,index)=>{
                 if(game.roomID==data.roomID){
                     if(data.username==game.hostName){
@@ -269,12 +339,12 @@ io.on('connection', (socket) => {
                         io.to(game.roomID).emit("RoomDismissed",x);
 
                         //从房间列表中删除房间
-                        if(game.roomID==data.roomID){
-                            if(data.username==game.hostName){
-                                gamelist.splice(index,1);
-                                roomlist.splice(index,1);
-                            };
-                        }; 
+                        gamelist.splice(index,1); 
+
+                        roomDelindex=roomlist.findIndex(r=>{return r.roomID==data.roomID});
+                        roomlist.splice(roomDelindex,1);
+
+
 
                         //所有人退出socket房间
                         io.of('/').in(game.roomID).clients((err, socketIds) => {
