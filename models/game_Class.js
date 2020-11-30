@@ -19,12 +19,16 @@ class Game{
             {playerName:"",playerTimeA:0,playerTimeB:0}
         ];
 
+
+        this.gameID="";
         this.gameVersion="CC1.0";
-        this.gameID=0;
+
+        this.gameDate=""; //游戏开始时间戳
         this.gameMenu=[];// afwe
         this.gameBoards=[];
-        this.gameDate=0; //游戏开始时间戳
-        this.gameresult={
+
+
+        this.gameResult={
             winnerteam:0,//0-无结果,1-1队,2-2队,3-和棋
             winner:[],
             loser:[],
@@ -78,8 +82,56 @@ class Game{
         data.gameType=this.gameType;
         data.gameTime=this.gameTime;
         data.players=this.players;
+
+        data.gameDate=this.gameDate;
         return data;
     };
+
+    GameStartedData(){
+        var data={};
+        data.roomID=this.roomID;
+        data.hostName=this.hostName;
+        data.gameName=this.gameName;
+        data.roomState=this.roomState;
+        data.gameType=this.gameType;
+        data.gameTime=this.gameTime;
+        data.players=this.players;
+
+        data.gameID=this.gameID;
+        data.gameVersion=this.gameVersion;
+
+        data.gameDate=this.gameDate;
+
+        return data;
+    }
+
+    GameOverData(){
+        var data={};
+        data.roomID=this.roomID;
+        data.hostName=this.hostName;
+        data.gameName=this.gameName;
+        data.roomState=this.roomState;
+        data.gameType=this.gameType;
+        data.gameTime=this.gameTime;
+        data.players=this.players;
+
+        data.gameID=this.gameID;
+        data.gameVersion=this.gameVersion;
+
+        data.gameDate=this.gameDate;
+        data.gameMenu=this.gameMenu;// afwe
+        data.gameBoards=this.gameBoards;
+        data.gameResult=this.gameResult;
+
+        data.gameResult={
+            winnerteam:1,//0-无结果,1-1队,2-2队,3-和棋 //测试数据
+            winner:[],
+            loser:[],
+            drawer:[],            
+        };
+        
+        return data;
+    }
 
     addPlayer(player){
         if(this.isfull()){
@@ -138,6 +190,16 @@ class Game{
     getPlayer(x){
         return this.players[x];
     };
+
+    start(){
+        this.roomState=2;
+        var time=Date.now();
+        console.log(time);
+        var now=new Date(time);
+        
+        this.gameDate=""+now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
+        this.gameID=this.Date+"-"+this.hostName;
+    }
 
 };
 exports.Game=Game;

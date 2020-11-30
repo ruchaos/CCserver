@@ -34,6 +34,10 @@ function tokenValid(data){
     };
 };
 
+function startGame(game){
+    
+}
+
 var user=new Map();
 var numUsers = 0;
 
@@ -221,8 +225,8 @@ io.on('connection', (socket) => {
                             io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
                         }else{
                             vPlayer=game.players[0];
-                            game.players[0]=game.players[1];                        
-                            game.players[1]=vPlayer;                        
+                            game.players[0]=game.players[1]; 
+                            game.players[1]=vPlayer; 
                             io.to(game.roomID).emit("PlayersChanges",game.EnterRoomSuccessData());
                         };
                     };
@@ -362,6 +366,73 @@ io.on('connection', (socket) => {
         };
     });
 
+    //房主开始游戏
+
+    socket.on("StartGame",(data)=>{
+        console.log(data.username+":StartGame");
+        if(tokenValid(data)){
+
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
+            gamelist.forEach((game,index)=>{
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                        if(game.isfull()){
+                            //改变游戏状态到游戏开始
+                            game.start();
+
+                            //添加到游戏中列表，并从等待中列表删除
+                            roomDelindex=roomlist.findIndex(r=>{return r.roomID==data.roomID});
+                            roomlist[roomDelindex].roomState=2;
+                            roomlistGameing.push(roomlist[roomDelindex]);
+                            roomlist.splice(roomDelindex,1);
+
+
+                            //广播gamestarted给房间里所有人
+                            io.to(game.roomID).emit("GameStarted",game.GameStartedData());
+
+
+                        }else{
+                            socket.emit("ErrorMsg",{msg:"人数不足"});
+                        };             
+                        
+                    };
+                };
+            });
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    //游戏结束测试
+  socket.on("testGameOver",(data)=>{
+        console.log(data.username+":StartGame");
+        if(tokenValid(data)){
+
+            // var game=gamelist.find(g=>{return g.roomID==data.roomID});
+            gamelist.forEach((game,index)=>{
+                if(game.roomID==data.roomID){
+                    if(data.username==game.hostName){
+                        
+                            //改变游戏状态到游戏游戏结束
+                            game.roomState=3;
+
+                            //添加到游戏中列表，并从等待中列表删除
+                            roomDelindex=roomlistGameing.findIndex(r=>{return r.roomID==data.roomID});  
+                            roomlistGameing.splice(roomDelindex,1);
+
+
+                            //广播gameover给房间里所有人
+                            io.to(game.roomID).emit("GameOver",game.GameOverData());
+                        
+                    };
+                };
+            });
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });  
     
 // 另一种删除数组元素的方式。roomlist=removeRoom（arr,roomID);此处无重复ID，所以用splice即可。
 // function removeRoom(arr, roomID) {
@@ -424,6 +495,8 @@ app.get('/',  function(req,res){
 var roomlist=[];
     // {roomID:123,roomState:1,gameName:"ruchaos 's game",hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
 
+var roomlistGameing=[];
+
 var gamelist=[];
 
 
@@ -432,15 +505,36 @@ var roomCounter =1;
 app.post('/list',function(req,res){
     //todo获取房间列表
     //console.log("listing");
-    var x={};
-    x={
-        type:"list",
-        rooms:roomlist
-    };
-    var msg= JSON.stringify(x);
+    if(req.body.roomState==1){
+        //等待中列表
+        var x={};
+        var rl=[];
+        rl=roomlist;
+        x={
+            type:"list",
+            rooms:rl
+        };
+        var msg= JSON.stringify(x);
+    
+        res.send(msg);
 
-    res.send(msg);
+    }else if(req.body.roomState==2){
+        //游戏中列表
+        var x={};
+        var rl=[];
+        rl=roomlistGameing;
+        x={
+            type:"list",
+            rooms:roomlistGameing
+        };
+        var msg= JSON.stringify(x);
+    
+        res.send(msg);
+    }
+
+
 });
+
 app.post('/register',function(req,res){
     //注册用户
     var x={};
