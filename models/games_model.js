@@ -1,8 +1,24 @@
 /**
  * Created by Administrator on 2020/10/28.
  */
+
+// data.roomID=this.roomID;
+// data.hostName=this.hostName;
+// data.gameName=this.gameName;
+// data.roomState=this.roomState;
+// data.gameType=this.gameType;
+// data.gameTime=this.gameTime;
+// data.players=this.players;
+
+// data.gameID=this.gameID;
+// data.gameVersion=this.gameVersion;
+
+// data.gameDate=this.gameDate;
+
+// data.notation=this.notation;
+// data.gameResult=this.gameResult;
 var mongoose= require('mongoose');
-Schema=mongoose.Schema;
+var Schema=mongoose.Schema;
 var GameSchema=new Schema({
     //房间相关
     roomID:{
@@ -48,16 +64,10 @@ var GameSchema=new Schema({
     gameDate:{
         type:String
     },
-    gameMenu:[
-        {
-            type:String
-        }        
-    ],
-    gameBoards:[
-        {
-            type:String
-        }  
-    ],
+    notation:{
+        type:Schema.Types.Mixed
+    },
+    
     gameResult:{
         winnerteam:{
             type:Number
@@ -76,7 +86,10 @@ var GameSchema=new Schema({
             {
                 type:String
             }
-        ]
+        ],
+        reason:{
+            type:Number
+        }
     }
 });
 exports.GameSchema=GameSchema;

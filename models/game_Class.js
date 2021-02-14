@@ -19,38 +19,47 @@ class Game{
             {playerName:"",playerTimeA:0,playerTimeB:0}
         ];
 
+        this.lastMoveTime=0;
+        this.noKillMoves=0;
+        this.drawAccepter=[];
+
 
         this.gameID="";
         this.gameVersion="CC1.0";
 
         this.gameDate=""; //游戏开始时间戳
-        this.gameMenu=[];// afwe
-        this.gameBoards=[];
+        var Notation=require("./notation_Class.js").Notation;
+        this.notation=new Notation();
 
 
         this.gameResult={
             winnerteam:0,//0-无结果,1-1队,2-2队,3-和棋
             winner:[],
             loser:[],
-            drawer:[],            
+            drawer:[], 
+            reason:0//0-无结果 1-规则胜 2-规则和 3-认输 4-约和 5-超时
         };
 
-        this.setInitTime(gameType);
+        this.setInitTime(gameTime);
         this.addPlayer(hostName); 
     };
+
+    addNotaion(notation){
+        this.notation.addNotation(notation);        
+    }
     
 
-    setInitTime(gameType){
+    setInitTime(gameTime){
         var timeA,timeB;
-        if(gameType==1){
+        if(gameTime==1){
             timeA=60;
             timeB=600;            
         }
-        else if(gameType==2){
+        else if(gameTime==2){
             timeA=2700;
             timeB=60;
         }
-        else if(gameType==3){
+        else if(gameTime==3){
             timeA=0;
             timeB=0;
         };
@@ -102,6 +111,8 @@ class Game{
 
         data.gameDate=this.gameDate;
 
+        data.notation=this.notation;
+
         return data;
     }
 
@@ -119,25 +130,39 @@ class Game{
         data.gameVersion=this.gameVersion;
 
         data.gameDate=this.gameDate;
-        data.gameMenu=this.gameMenu;// afwe
-        data.gameBoards=this.gameBoards;
+       
+        data.notation=this.notation;
         data.gameResult=this.gameResult;
-
-        data.gameResult={
-            winnerteam:1,//0-无结果,1-1队,2-2队,3-和棋 //测试数据
-            winner:[],
-            loser:[],
-            drawer:[],            
-        };
         
         return data;
+    }
+
+    GamingData(){
+        var data={};
+        data.roomID=this.roomID;
+        data.hostName=this.hostName;
+        data.gameName=this.gameName;
+        data.roomState=this.roomState;
+        data.gameType=this.gameType;
+        data.gameTime=this.gameTime;
+        data.players=this.players;
+
+        data.gameID=this.gameID;
+        data.gameVersion=this.gameVersion;
+
+        data.gameDate=this.gameDate;
+       
+        data.notation=this.notation;
+        data.gameResult=this.gameResult;
+        
+        return data;        
     }
 
     addPlayer(player){
         if(this.isfull()){
             return 0;
         }else{
-            if(this.gameType==1){
+            if(this.gameType==1||this.gameType==4){
                 if(this.players[0].playerName==""){
                     this.players[0].playerName=player;
                     this.players[2].playerName=player;
@@ -164,10 +189,10 @@ class Game{
                 else if(this.players[3].playerName==""){
                     this.players[3].playerName=player;
                     this.playernum++;
-                };
-            }; 
-        };             
-    };
+                }
+            } 
+        }             
+    }
 
     removePlayer(playerName){
         this.players.forEach(player=>{
@@ -179,7 +204,7 @@ class Game{
     }
 
     isfull(){
-        if(((this.gameType==1)&&(this.playernum>=2))||((this.gameType==2)&&(this.playernum>=4))||((this.gameType==3)&&(this.playernum>=4))){
+        if(((this.gameType==1)&&(this.playernum>=2))||((this.gameType==2)&&(this.playernum>=4))||((this.gameType==3)&&(this.playernum>=4))||((this.gameType==4)&&(this.playernum>=2))){
             return true;
         }
         else{
@@ -187,19 +212,79 @@ class Game{
         };
     };
 
-    getPlayer(x){
-        return this.players[x];
+    isPlayer(username){
+        var isPlayer=0;
+        for(let i=0;i<this.players.length;i++){
+            if(username==this.players[i].playerName){
+                if(i%2==0){
+                    isPlayer=1;
+                }else{
+                    isPlayer=2;
+                }
+            }
+        }
+        
+        return isPlayer;
     };
 
-    start(){
+    startGame(){
         this.roomState=2;
         var time=Date.now();
         console.log(time);
-        var now=new Date(time);
+        this.lastMoveTime=time;
+
+        var now=new Date(time);       
         
         this.gameDate=""+now.getFullYear()+"-"+(now.getMonth()+1)+"-"+now.getDate();
-        this.gameID=this.Date+"-"+this.hostName;
+        this.gameID=time+"-"+this.hostName;
+
+        //4-1v1随机先后 随机先后手
+        if(this.gameType==4){
+            var firstPlayer="";
+            var toss=time%2;
+            if(toss==0){
+                firstPlayer=this.players[1].playerName;
+                this.players[1].playerName=this.players[0].playerName;
+                this.players[3].playerName=this.players[0].playerName;
+                this.players[0].playerName=firstPlayer;
+                this.players[2].playerName=firstPlayer;            
+            }
+        }
+        
+
+    }
+
+    endGame(winnerteam,reason){
+        this.gameResult={
+            winnerteam:winnerteam,//0-无结果,1-1队,2-2队,3-和棋
+            winner:[],
+            loser:[],
+            drawer:[], 
+            reason:0//0-无结果 1-规则胜 2-规则和 3-认输 4-约和 5-超时
+        };
+        if(winnerteam==1){
+            this.gameResult.winner.push(this.players[0].playerName);
+            this.gameResult.winner.push(this.players[2].playerName);
+            this.gameResult.loser.push(this.players[1].playerName);
+            this.gameResult.loser.push(this.players[3].playerName);            
+        }else if(winnerteam==2){
+            this.gameResult.winner.push(this.players[1].playerName);
+            this.gameResult.winner.push(this.players[3].playerName);
+            this.gameResult.loser.push(this.players[0].playerName);
+            this.gameResult.loser.push(this.players[2].playerName);  
+        }else if(winnerteam==0){
+            this.gameResult.drawer.push(this.players[0].playerName);
+            this.gameResult.drawer.push(this.players[1].playerName);
+            this.gameResult.drawer.push(this.players[2].playerName);
+            this.gameResult.drawer.push(this.players[3].playerName);
+        }
+        this.gameResult.reason=reason;
+        if(this.gameType==1||this.gameType==4){
+            this.gameName=this.players[0].playerName+" vs "+this.players[1].playerName;
+        }else{
+            this.gameName=this.players[0].playerName+"/"+this.players[2].playerName+" vs "+this.players[1].playerName+"/"+this.players[3].playerName;
+        }
     }
 
 };
-exports.Game=Game;
+exports.Game = Game;

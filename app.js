@@ -1,15 +1,19 @@
 ﻿var express=require('express');
 var bodyParser=require('body-parser');
-var expressSession=require("express-session");
+
 
 var mongoose=require('mongoose');
 // var mongoStore=require('connect-mongo')(expressSession);
 var UserSchema=require('./models/users_model.js').UserSchema;
+var GameSchema=require('./models/games_model.js').GameSchema;
 var Game=require('./models/game_Class.js').Game;
+var Rules=require('./CunningChessRules.js');
+var Notation = require('./models/notation_Class.js').Notation;
 
 var io = require('socket.io')();
 
 var User=mongoose.model('User',UserSchema);
+var GameData=mongoose.model('Game',GameSchema);
 
 //mongoose设置
 mongoose.set('useNewUrlParser', true);
@@ -33,10 +37,6 @@ function tokenValid(data){
         return true;
     };
 };
-
-function startGame(game){
-    
-}
 
 var user=new Map();
 var numUsers = 0;
@@ -107,13 +107,8 @@ io.on('connection', (socket) => {
                     if(game.isfull()){
                         socket.emit("ErrorMsg",{msg:"房间已满"});
                     }
-                    else{
-                        var gameplayers=[game.players[0].playerName,game.players[1].playerName,game.players[2].playerName,game.players[3].playerName];
-                        function isPlayer(playerName){
-                            return data.username==playerName;
-                        };
-                        var alreadyHere=gameplayers.some(isPlayer);
-                        if(!alreadyHere){
+                    else{                        
+                        if(game.isPlayer(data.username)==0){
                             game.addPlayer(data.username);
                         };
                         socket.join(game.roomID,()=>{                        
@@ -349,7 +344,6 @@ io.on('connection', (socket) => {
                         roomlist.splice(roomDelindex,1);
 
 
-
                         //所有人退出socket房间
                         io.of('/').in(game.roomID).clients((err, socketIds) => {
                             if (err) throw err;                  
@@ -373,12 +367,12 @@ io.on('connection', (socket) => {
         if(tokenValid(data)){
 
             // var game=gamelist.find(g=>{return g.roomID==data.roomID});
-            gamelist.forEach((game,index)=>{
+            gamelist.forEach((game)=>{
                 if(game.roomID==data.roomID){
                     if(data.username==game.hostName){
                         if(game.isfull()){
                             //改变游戏状态到游戏开始
-                            game.start();
+                            game.startGame();
 
                             //添加到游戏中列表，并从等待中列表删除
                             roomDelindex=roomlist.findIndex(r=>{return r.roomID==data.roomID});
@@ -404,26 +398,41 @@ io.on('connection', (socket) => {
         };
     });
 
-    //游戏结束测试
+    //游戏结束-测试用
   socket.on("testGameOver",(data)=>{
         console.log(data.username+":StartGame");
         if(tokenValid(data)){
 
             // var game=gamelist.find(g=>{return g.roomID==data.roomID});
-            gamelist.forEach((game,index)=>{
+            gamelist.forEach((game)=>{
                 if(game.roomID==data.roomID){
                     if(data.username==game.hostName){
                         
                             //改变游戏状态到游戏游戏结束
                             game.roomState=3;
 
-                            //添加到游戏中列表，并从等待中列表删除
+                            //并从游戏中列表删除
                             roomDelindex=roomlistGameing.findIndex(r=>{return r.roomID==data.roomID});  
                             roomlistGameing.splice(roomDelindex,1);
 
 
                             //广播gameover给房间里所有人
                             io.to(game.roomID).emit("GameOver",game.GameOverData());
+
+                            //存储游戏
+                            if(game.notation.NotationHistory.length>4){
+                                var gamedata=new GameData(game.GameOverData());
+                                gamedata.save();
+                            }
+                            
+
+                            // //所有人退出socket房间
+                            // io.of('/').in(game.roomID).clients((err, socketIds) => {
+                            //     if (err) throw err;                  
+                            //     socketIds.forEach(socketId => {
+                            //         io.sockets.sockets[socketId].leave(game.roomID);
+                            //     }); 
+                            // });
                         
                     };
                 };
@@ -434,24 +443,312 @@ io.on('connection', (socket) => {
         };
     });  
     
-// 另一种删除数组元素的方式。roomlist=removeRoom（arr,roomID);此处无重复ID，所以用splice即可。
-// function removeRoom(arr, roomID) {
-//     var newarr=[];
-//     arr.forEach(function(room,index){
+    // 另一种删除数组元素的方式。roomlist=removeRoom（arr,roomID);此处无重复ID，所以用splice即可。
+    // function removeRoom(arr, roomID) {
+    //     var newarr=[];
+    //     arr.forEach(function(room,index){
 
-//         if(room.roomID!=roomID){         
-//             newarr.push(element)
-//         }
-//     })
-//     return newarr;
-// };
+    //         if(room.roomID!=roomID){         
+    //             newarr.push(element)
+    //         }
+    //     })
+    //     return newarr;
+    // };
     
     //游戏开始
     //游戏消息
-    //游戏结束
-    //断线重连
+    socket.on("GameMove",(data)=>{
 
-    //观战
+        //     {
+        //         username:username,
+        //         token:token,
+        //         roomID:this.gameInfo.roomID,
+        //         gameID:this.gameInfo.gameID,
+                
+        //         notation:this.notation,
+        //         gameMove:this.gameMove
+        // }
+        console.log(data.username+":GameMove");
+        if(tokenValid(data)){
+            gamelist.forEach(game=>{
+                if(game.gameID==data.gameID){
+                    //确定提交人是否是本局游戏的当前行棋玩家
+                    if(game.players[game.notation.currentPlayer-1].playerName==data.username){
+                        
+                        if(game.gameTime!=3){
+                            if (game.lastMoveTime==0){
+                                game.lastMoveTime=Date.now();
+                            }
+                            //扣减时间
+                            var spendTime=Math.floor((Date.now()-game.lastMoveTime)/1000);
+                            if(game.players[game.notation.currentPlayer-1].playerTimeA< spendTime){
+                                
+                                game.players[game.notation.currentPlayer-1].playerTimeB=game.players[game.notation.currentPlayer-1].playerTimeB+game.players[game.notation.currentPlayer-1].playerTimeA-spendTime;
+                                if(game.players[game.notation.currentPlayer-1].playerTimeB<0){
+                                    game.players[game.notation.currentPlayer-1].playerTimeB=0;
+                                }
+                                game.players[game.notation.currentPlayer-1].playerTimeA=0;
+
+                                
+
+                            }else{
+                                game.players[game.notation.currentPlayer-1].playerTimeA=game.players[game.notation.currentPlayer-1].playerTimeA-spendTime;
+                            }
+                            //根据时间规则重置时间 
+                            if(game.gameTime==1){
+                                game.players[game.notation.currentPlayer-1].playerTimeA=60;
+                            }else if(game.gameTime==2){
+                                game.players[game.notation.currentPlayer-1].playerTimeB=60;
+                            }
+
+                            //如果是1v1模式，则让盟友扣减同样时间
+                            if(game.gameType==1||game.gameType==4){
+                                var K=(game.notation.currentPlayer+1)%4;
+                                game.players[K].playerTimeA=game.players[game.notation.currentPlayer-1].playerTimeA;
+                                game.players[K].playerTimeB=game.players[game.notation.currentPlayer-1].playerTimeB;
+                            }
+
+                            //更新上一步的时间
+                            game.lastMoveTime=Date.now()-1000;
+
+                            //记录无吃子步数，可能用于判断和棋
+                            if(data.gameMove.currentSkill=="kill"){
+                                game.noKillMoves=0;
+                            }else{
+                                game.noKillMoves++;
+                            }
+
+                            //如果是被提和玩家，则取消提和
+                            var isDrawAccepter=false;
+                            for(let i=0;i<game.drawAccepter.length;i++){
+                                if(data.username==game.drawAccepter[i]){
+                                    isDrawAccepter=true;
+                                }
+                            }
+                            if(isDrawAccepter){
+                                game.drawAccepter=[];
+                                io.to(game.roomID).emit("OfferingDraw",{roomID:data.roomID,gameID:data.gameID,drawAccepter:game.drawAccepter});
+                            }
+                            
+
+                        
+                            //如果是当前行棋玩家，则更新游戏notation,并广播给所有本房间玩家
+                            //转换客户端服务器数据类型
+                            var dataNotation=new Notation();
+                            dataNotation.currentPostions=data.notation.currentPostions;
+                            dataNotation.currentStats=data.notation.currentStats;
+                            dataNotation.currentPlayer=data.notation.currentPlayer;
+                            dataNotation.lastMove=data.notation.lastMove;                            
+                            dataNotation.NotationHistory=data.notation.NotationHistory;
+
+                            //加入每步时间记录
+                            data.gameMove.spendTime=spendTime;
+
+                            //根据步法和局面，提供新的局面
+                            var notation=Rules.getNewNotaion(data.gameMove,dataNotation);
+                            
+                            game.notation=notation;
+
+                            io.to(game.roomID).emit("NewNotation",{roomID:data.roomID,notation:notation,players:game.players});
+                            //判断游戏是否已经有结果，如果有结果，则发送给所有人游戏结果
+                            if(notation.winnerteam>0){
+                                game.endGame(notation.winnerteam,notation.reason);
+                                //改变游戏状态到游戏游戏结束
+                                game.roomState=3;                    
+            
+                                //并从游戏中列表删除
+                                roomDelindex=roomlistGameing.findIndex(r=>{return r.roomID==data.roomID});  
+                                roomlistGameing.splice(roomDelindex,1);
+            
+                                //广播gameover给房间里所有人
+                                io.to(game.roomID).emit("GameOver",game.GameOverData());
+
+                                //存储游戏
+                                if(game.notation.NotationHistory.length>4){
+                                    var gamedata=new GameData(game.GameOverData());
+                                    gamedata.save();
+                                }
+
+
+                                // //所有人退出socket房间
+                                // io.of('/').in(game.roomID).clients((err, socketIds) => {
+                                //     if (err) throw err;                  
+                                //     socketIds.forEach(socketId => {
+                                //         io.sockets.sockets[socketId].leave(game.roomID);
+                                //     }); 
+                                // });
+                            }
+            
+                        }else{
+                            //否则只回复消息人
+                            socket.emit("TestNotation",{roomID:data.roomID,notation:notation});
+                        }
+                    };
+                };
+            });
+            
+            
+            
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    }); 
+
+    //认输
+    socket.on("Surrender",(data)=>{
+        console.log(data.username+":Surrender");
+        if(tokenValid(data)){            
+            gamelist.forEach((game)=>{
+                if(game.gameID==data.gameID){
+                    if(game.isPlayer(data.username)>0){
+                        game.endGame(3-game.isPlayer(data.username),3);//0-无结果,1-1队,2-2队,3-和棋//0-无结果 1-规则胜 2-规则和 3-认输 4-约和 5-超时
+                    }                                                    
+                };
+                //改变游戏状态到游戏游戏结束
+                game.roomState=3;                    
+            
+                //并从游戏中列表删除
+                roomDelindex=roomlistGameing.findIndex(r=>{return r.roomID==data.roomID});  
+                roomlistGameing.splice(roomDelindex,1);
+
+                //广播gameover给房间里所有人
+                io.to(game.roomID).emit("GameOver",game.GameOverData());
+
+                //存储游戏
+                if(game.notation.NotationHistory.length>4){
+                    var gamedata=new GameData(game.GameOverData());
+                    gamedata.save();
+                }
+
+
+                // //所有人退出socket房间
+                // io.of('/').in(game.roomID).clients((err, socketIds) => {
+                //     if (err) throw err;                  
+                //     socketIds.forEach(socketId => {
+                //         io.sockets.sockets[socketId].leave(game.roomID);
+                //     }); 
+                // });
+
+
+            });
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    //和棋提议
+    socket.on("DrawOffer",(data)=>{
+        console.log(data.username+":DrawOffer");
+        if(tokenValid(data)){            
+            gamelist.forEach((game)=>{
+                if(game.gameID==data.gameID){
+                    //检查提出方,并将对方设置为接受方
+                    if(game.isPlayer(data.username)==1){
+                        game.drawAccepter=[];
+                        game.drawAccepter.push(game.players[1].playerName);
+                        game.drawAccepter.push(game.players[3].playerName);
+                    }else if(game.isPlayer(data.username)==2){
+                        game.drawAccepter=[];
+                        game.drawAccepter.push(game.players[0].playerName);
+                        game.drawAccepter.push(game.players[2].playerName);                      
+                    } 
+                    //发布提和消息
+                    io.to(game.roomID).emit("OfferingDraw",{roomID:data.roomID,gameID:data.gameID,drawAccepter:game.drawAccepter});                                                         
+                };
+            });
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    //同意和棋
+    socket.on("DrawOfferAccept",(data)=>{
+        console.log(data.username+":DrawOfferAccept");
+        if(tokenValid(data)){            
+            gamelist.forEach((game)=>{
+                if(game.gameID==data.gameID){
+                    var isDrawAccepter=false;
+                    for(let i=0;i<game.drawAccepter.length;i++){
+                        if(data.username==game.drawAccepter[i]){
+                            isDrawAccepter=true;
+                        }
+                    }
+                    if(isDrawAccepter){
+                        //游戏以和棋结束
+                        game.endGame(3,4);//0-无结果,1-1队,2-2队,3-和棋//0-无结果 1-规则胜 2-规则和 3-认输 4-约和 5-超时
+                        
+                        //改变游戏状态到游戏游戏结束
+                        game.roomState=3;                    
+                    
+                        //并从游戏中列表删除
+                        roomDelindex=roomlistGameing.findIndex(r=>{return r.roomID==data.roomID});  
+                        roomlistGameing.splice(roomDelindex,1); 
+
+                        //广播gameover给房间里所有人
+                        io.to(game.roomID).emit("GameOver",game.GameOverData()); 
+
+                        //存储游戏
+                        if(game.notation.NotationHistory.length>4){
+                            var gamedata=new GameData(game.GameOverData());
+                            gamedata.save();
+                        }
+                        
+                        //所有人退出socket房间
+                        // io.of('/').in(game.roomID).clients((err, socketIds) => {
+                        //     if (err) throw err;                  
+                        //     socketIds.forEach(socketId => {
+                        //         io.sockets.sockets[socketId].leave(game.roomID);
+                        //     }); 
+                        // });
+                    }                                                   
+                };
+            });
+                      
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });    
+
+    
+    //断线重连+观战
+    socket.on("EnterGame",(data)=>{
+        console.log(data.username+":EnterGame");
+        if(tokenValid(data)){            
+            gamelist.forEach((game)=>{
+                if(game.roomID==data.roomID){                   
+                        socket.join(game.roomID,()=>{                        
+                            socket.emit("EnterGameSuccess",game.GamingData());                                                
+                        });                                       
+                }
+            });
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+    //查看棋谱
+    socket.on("ReviewNotation",(data)=>{
+        console.log(data.username+":ReviewNotation");
+        if(tokenValid(data)){
+            GameData.find({gameID:data.gameID},{_id:0},(err,docs)=>{
+                if(err){
+                    console.log(err);
+                }else{
+                    var data=docs[0];
+                    socket.emit("GotNotation",data);
+                }
+
+            });
+
+        }else{
+            socket.emit("ErrorMsg",{msg:"验证登录失败！"});
+        };
+    });
+
+
 
 });
 
@@ -509,28 +806,93 @@ app.post('/list',function(req,res){
         //等待中列表
         var x={};
         var rl=[];
-        rl=roomlist;
+       
+        if(req.body.playerName==""){
+            rl=roomlist;
+        }else{            
+            roomlist.forEach(room=>{
+                if(room.hostName==req.body.playerName){
+                    rl.push(room);
+                }
+            });
+        }
+
         x={
             type:"list",
             rooms:rl
         };
-        var msg= JSON.stringify(x);
-    
+        var msg= JSON.stringify(x);    
         res.send(msg);
+        
 
     }else if(req.body.roomState==2){
         //游戏中列表
         var x={};
         var rl=[];
-        rl=roomlistGameing;
+        if(req.body.playerName==""){
+            rl=roomlist;
+        }else{            
+            roomlist.forEach(room=>{
+                if(room.hostName==req.body.playerName){
+                    rl.push(room);
+                }
+            });
+        }
+
         x={
             type:"list",
-            rooms:roomlistGameing
+            rooms:rl
         };
-        var msg= JSON.stringify(x);
-    
+        var msg= JSON.stringify(x);    
         res.send(msg);
+
+    }else if(req.body.roomState==3){
+        var x={};
+        var rl=[];
+        var opt={
+            roomID:1,
+            gameName:1,
+            hostName:1,
+            gameType:1,
+            gameTime:1,
+            roomState:1, 
+            gameID:1,
+            gameDate:1,
+        }
+        if(req.body.playerName==""){
+            GameData.find({},opt,(err,docs)=>{
+                if(err){
+                    console.log(err);
+                }else{
+                    rl=docs;
+                    x={
+                        type:"list",
+                        rooms:rl
+                    };
+                    var msg= JSON.stringify(x);    
+                    res.send(msg);            
+                }
+            });
+            
+        }else{
+            GameData.find({players:{$elemMatch: {playerName:req.body.playerName}}},opt,(err,docs)=>{
+                if(err){
+                    console.log(err);
+                }else{
+                    rl=docs;
+                    x={
+                        type:"list",
+                        rooms:rl
+                    };
+                    var msg= JSON.stringify(x);    
+                    res.send(msg);            
+                }
+            });            
+        }        
+
+       
     }
+    
 
 
 });
@@ -615,24 +977,15 @@ app.post('/register',function(req,res){
 app.post('/record',function(req,res){
     //todo查询对战记录
     //测试条件
-    var x= {type:"error",error:{},username:"",record:123};
-    if(req.body.username=="rux"){
-        x={
-            type:"error",
-            error:{
-                username:req.body.username
-            }
-        };
-
-    }else{
-        x={type:"record",username:"rux",record:123};
-        x.username=req.body.username;
-        x.record=233;
-    };
-
-    var msg= JSON.stringify(x);
-    console.log(msg);
-    res.send(msg);
+    GameData.countDocuments({players:{$elemMatch: {playerName:req.body.username}}},(err,num)=>{
+        if(err){
+            console.log(err);
+        }else{
+            var x={type:"record",record:num};
+            var msg= JSON.stringify(x);
+            res.send(msg);
+        }  
+    });
 });
 
 app.post('/changePW',function(req,res){
