@@ -784,10 +784,11 @@ app.use(bodyParser.urlencoded({
 //     })
 // }));
 
-//app.use('/',express.static('./public'));
-app.get('/',  function(req,res){
-    res.send("Main Index!");
-});
+app.use('/',express.static('./public'));
+// app.get('/',  function(req,res){
+
+//     res.send("Main Index!");
+// });
 
 var roomlist=[];
     // {roomID:123,roomState:1,gameName:"ruchaos 's game",hostName:"ruchaos",gameType:"1v1",gameTime:"快棋",gameDate:"20190715"},
@@ -1086,7 +1087,7 @@ app.post('/login',function(req,res){
     });
 });
 
-app.listen(8080);
+app.listen(80);
 
 
 
