@@ -71,7 +71,7 @@ class Notation{
         note.currentStats=notation.currentStats;
         if(this.NotationHistory.length>0){
             var currentStep=this.NotationHistory.length-1;
-            if(note.currentPlayer!=this.NotationHistory[currentStep].currentPlayer){
+            if(note.lastMove!=this.NotationHistory[currentStep].lastMove){
                 this.NotationHistory.push(note);
             }
         }else{
