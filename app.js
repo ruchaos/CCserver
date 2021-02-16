@@ -831,9 +831,9 @@ app.post('/list',function(req,res){
         var x={};
         var rl=[];
         if(req.body.playerName==""){
-            rl=roomlist;
+            rl=roomlistGameing;
         }else{            
-            roomlist.forEach(room=>{
+            roomlistGameing.forEach(room=>{
                 if(room.hostName==req.body.playerName){
                     rl.push(room);
                 }
@@ -861,7 +861,7 @@ app.post('/list',function(req,res){
             gameDate:1,
         }
         if(req.body.playerName==""){
-            GameData.find({},opt,(err,docs)=>{
+            GameData.find({},opt,{sort:"-gameID"},(err,docs)=>{
                 if(err){
                     console.log(err);
                 }else{
@@ -876,7 +876,7 @@ app.post('/list',function(req,res){
             });
             
         }else{
-            GameData.find({players:{$elemMatch: {playerName:req.body.playerName}}},opt,(err,docs)=>{
+            GameData.find({players:{$elemMatch: {playerName:req.body.playerName}}},opt,{sort:"-gameID"},(err,docs)=>{
                 if(err){
                     console.log(err);
                 }else{
